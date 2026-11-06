@@ -1,0 +1,46 @@
+{
+  "manifest_version": 3,
+  "name": "Mail Layout",
+  "version": "1.0.0",
+  "description": "Applies saved layout adjustments to mail views.",
+  "permissions": ["storage"],
+  "host_permissions": ["https://mail.google.com/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://mail.google.com/*"],
+      "js": ["content.js"],
+      "all_frames": true,
+      "run_at": "document_start"
+    }
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "Mail Layout"
+  },
+  "commands": {
+    "pick": {
+      "suggested_key": {
+        "default": "Ctrl+Alt+H",
+        "mac": "MacCtrl+Alt+H"
+      },
+      "description": "Pick an element in Gmail to hide: click to choose, up and down to widen or narrow, Esc to cancel"
+    },
+    "edit": {
+      "suggested_key": {
+        "default": "Ctrl+Alt+E",
+        "mac": "MacCtrl+Alt+E"
+      },
+      "description": "Pick an element in Gmail to edit in the open message"
+    },
+    "peek": {
+      "suggested_key": {
+        "default": "Ctrl+Alt+V",
+        "mac": "MacCtrl+Alt+V"
+      },
+      "description": "Show or hide everything the rules are hiding"
+    }
+  }
+}

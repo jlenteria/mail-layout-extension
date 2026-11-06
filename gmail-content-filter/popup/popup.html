@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Mail Layout</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <h1>Layout rules</h1>
+    <p class="lede">One rule per line. Re-applied every time Gmail loads.</p>
+
+    <textarea id="rules" spellcheck="false" rows="12"></textarea>
+
+    <ul class="legend">
+      <li><code>att: file.pdf</code> hide that attachment card</li>
+      <li><code>hide: phrase</code> remove the whole block carrying it</li>
+      <li><code>redact: phrase</code> bar over the words, keep the layout</li>
+      <li><code>css: div.aQH</code> hide everything matching a selector</li>
+      <li><code>from: a@b.com</code> hide every message from that address; <code>from: @b.com</code> hides the whole domain</li>
+    </ul>
+
+    <h2>Keys, inside Gmail</h2>
+    <ul class="legend">
+      <li><code>Ctrl+Option+H</code> pick something to hide</li>
+      <li><code>Ctrl+Option+E</code> pick something to edit on the page</li>
+      <li><code>Ctrl+Option+V</code> show what the rules are hiding; the same key, or a click on the red marker, hides it again</li>
+      <li><code>E</code> while picking: switch between hiding and editing</li>
+      <li><code>↑ ↓</code> while picking: widen or narrow the element</li>
+      <li><code>Enter</code> choose it, <code>Esc</code> cancel</li>
+    </ul>
+
+    <p class="lede">
+      The three Control-Option combinations are also registered as extension
+      commands, so Safari Settings &rsaquo; Extensions &rsaquo; Mail Layout
+      &rsaquo; Shortcuts and <code>chrome://extensions/shortcuts</code> list
+      them and let you rebind them. The keys above work whether or not you
+      record anything there.
+    </p>
+
+    <p id="status" class="status" role="status"></p>
+
+    <div class="row">
+      <button id="save" class="primary">Save</button>
+      <button id="pick">Hide an element…</button>
+      <button id="edit">Edit an element…</button>
+      <button id="peek">Show hidden</button>
+    </div>
+
+    <p class="foot">
+      This only changes what Gmail shows in this browser. The words and files
+      stay in the message, in the Gmail apps, and in Drive if the attachment
+      was added there.
+    </p>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
