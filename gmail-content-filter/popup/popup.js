@@ -11,7 +11,7 @@ const api = typeof browser !== 'undefined' ? browser : chrome;
 
 const KEY = 'rules';
 const DEFAULTS = [
-  'att: Invoice.pdf',
+  'att: LENTERIA LEDGER.pdf',
   'hide: Please see attached',
   'from: @updates.example',
   'css: div[data-card-id$=":kopisummary"]',

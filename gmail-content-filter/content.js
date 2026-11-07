@@ -3,7 +3,7 @@
 
   Rules, one per line, edited from the toolbar popup:
 
-      att: Invoice.pdf                hide the attachment card
+      att: LENTERIA LEDGER.pdf        hide the attachment card
       hide: Please see attached       remove the whole block carrying the phrase
       redact: 4419-0021               bar over the words, keep the layout
       css: div.aQH                    hide everything matching a selector
@@ -44,7 +44,7 @@
   const OWNER = window.top === window.self ? 't' : 'f';
 
   const DEFAULTS = [
-    'att: Invoice.pdf',
+    'att: LENTERIA LEDGER.pdf',
     'hide: Please see attached',
     'from: @updates.example',
     'css: div[data-card-id$=":kopisummary"]',
@@ -352,7 +352,7 @@
     }
   }
 
-  // Inbox rows: "Attachment: Invoice.pdf" chips, which the card pass
+  // Inbox rows: "Attachment: LENTERIA LEDGER.pdf" chips, which the card pass
   // above never sees because a collapsed conversation has no card.
   function runListChips(list) {
     if (!list.length) return;
