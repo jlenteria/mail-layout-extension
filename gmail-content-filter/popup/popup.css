@@ -88,6 +88,15 @@ textarea:focus {
   font-size: 12px;
 }
 
+.status.error {
+  color: #d93025;
+}
+
+textarea:disabled,
+button:disabled {
+  opacity: .55;
+}
+
 .row {
   display: flex;
   flex-wrap: wrap;

@@ -47,7 +47,40 @@
     'att: Invoice.pdf',
     'hide: Please see attached',
     'from: @updates.example',
+    'css: div[data-card-id$=":kopisummary"]',
   ].join('\n');
+
+  // Gmail stamps each AI Overview card with a per-message data-card-id, so the
+  // exact id is gone on the next refresh. Match the stable suffix instead.
+  // This is applied in addition to the saved rules, so the card stays hidden
+  // even when Safari's storage is stale or the saved list was overwritten.
+  const BUILTIN_CSS = ['div[data-card-id$=":kopisummary"]'];
+
+  // Safari's extension storage is database backed and intermittently rejects
+  // a read or a write with "Disk I/O error" (seen on Safari 18.5 and 26/27,
+  // and reported by other extensions too). The failure is temporary, so every
+  // access is retried instead of being treated as "nothing saved" - that old
+  // fallback is what made saved rules silently disappear from the page.
+  const RETRY_MS = [0, 120, 300, 700];
+  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  async function retryStorage(operation) {
+    let lastError;
+    for (const delay of RETRY_MS) {
+      if (delay) await wait(delay);
+      try {
+        return await operation();
+      } catch (err) {
+        lastError = err;
+      }
+    }
+    throw lastError;
+  }
+
+  const readStoredRules = () => retryStorage(() => api.storage.local.get(KEY));
+  const writeStoredRules = (text) => retryStorage(
+    () => api.storage.local.set({ [KEY]: text }),
+  );
 
   const STYLE_TEXT =
     `[${ATTR}] { display: none !important; }`
@@ -87,6 +120,8 @@
   // ------------------------------------------------------------------ rules
 
   let RULES = { att: [], hide: [], redact: [], css: [], from: [] };
+  let RULES_TEXT = '';
+  let rulesLoaded = false;
 
   function parse(text) {
     const out = { att: [], hide: [], redact: [], css: [], from: [] };
@@ -102,12 +137,28 @@
     return out;
   }
 
+  let rulesRetry = null;
+
   async function loadRules() {
     try {
-      const stored = await api.storage.local.get(KEY);
-      RULES = parse(stored[KEY] === undefined ? DEFAULTS : stored[KEY]);
-    } catch {
-      RULES = parse(DEFAULTS);
+      const stored = await readStoredRules();
+      RULES_TEXT = stored[KEY] === undefined ? DEFAULTS : String(stored[KEY]);
+      RULES = parse(RULES_TEXT);
+      rulesLoaded = true;
+      apply();
+      watchFrames();
+      return true;
+    } catch (err) {
+      // Keep the rules already in memory. Substituting DEFAULTS here would
+      // make every hidden element reappear just because one read failed.
+      console.warn('[Mail Layout] could not read rules; retrying', err);
+      if (!rulesRetry) {
+        rulesRetry = setTimeout(() => {
+          rulesRetry = null;
+          loadRules();
+        }, 4000);
+      }
+      return false;
     }
   }
 
@@ -499,12 +550,13 @@
 
     const empty = !r.att.length && !r.hide.length && !r.redact.length
       && !r.css.length && !r.from.length;
-    if (empty) return;
+    if (empty && !BUILTIN_CSS.length) return;
 
     for (const doc of docs) {
       if (r.hide.length) runHide(doc, r.hide);
       if (r.redact.length) runRedact(doc, r.redact);
       if (r.css.length) runCss(doc, r.css);
+      if (BUILTIN_CSS.length) runCss(doc, BUILTIN_CSS);
     }
     if (OWNER === 't') {
       if (r.from.length) runFrom(r.from);
@@ -811,11 +863,40 @@
   }
 
   async function appendRule(line) {
-    const stored = await api.storage.local.get(KEY);
-    const text = stored[KEY] === undefined ? DEFAULTS : String(stored[KEY]);
+    const hadRules = rulesLoaded;
+    let text = RULES_TEXT;
+    try {
+      const stored = await readStoredRules();
+      text = stored[KEY] === undefined ? DEFAULTS : String(stored[KEY]);
+      RULES_TEXT = text;
+      rulesLoaded = true;
+    } catch (err) {
+      // A failed read must not cost the user the line: fall back to the copy
+      // already in memory and let the write attempt do its best.
+      console.warn('[Mail Layout] could not read rules before appending', err);
+    }
+
     const existing = text.split('\n').map((s) => s.trim()).filter(Boolean);
-    if (existing.includes(line.trim())) return;
-    await api.storage.local.set({ [KEY]: `${text.replace(/\s+$/, '')}\n${line}` });
+    if (existing.includes(line.trim())) return true;
+
+    const next = `${text.replace(/\s+$/, '')}\n${line}`;
+    // Apply before persisting: the element disappears now even if Safari
+    // refuses the write for a moment.
+    RULES_TEXT = next;
+    RULES = parse(next);
+    apply();
+
+    // Never write a guess over rules that were never read. Doing so could
+    // replace the real list with DEFAULTS plus this one line.
+    if (!hadRules && !rulesLoaded) return false;
+
+    try {
+      await writeStoredRules(next);
+      return true;
+    } catch (err) {
+      console.warn('[Mail Layout] could not save the new rule', err);
+      return false;
+    }
   }
 
   function openRuleDialog(el) {
@@ -864,9 +945,15 @@
         status.textContent = 'A rule must start with att:, hide:, redact:, css: or from:';
         return;
       }
-      await appendRule(line);
-      status.textContent = 'saved';
-      setTimeout(() => dlg.remove(), 350);
+      try {
+        const saved = await appendRule(line);
+        status.textContent = saved
+          ? 'saved'
+          : 'hidden now, but Safari would not save it (disk error). Try again before reloading.';
+        if (saved) setTimeout(() => dlg.remove(), 350);
+      } catch {
+        status.textContent = 'Could not save the rule. Try again.';
+      }
       apply();
     };
 
@@ -1134,12 +1221,18 @@
 
   api.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local' || !(KEY in changes)) return;
-    RULES = parse(changes[KEY].newValue);
+    RULES_TEXT = changes[KEY].newValue === undefined
+      ? DEFAULTS
+      : String(changes[KEY].newValue);
+    RULES = parse(RULES_TEXT);
+    rulesLoaded = true;
     schedule();
   });
 
-  loadRules().then(() => {
-    apply();
-    watchFrames();
-  });
+  // Paint and start watching immediately. loadRules applies the saved rules
+  // itself as soon as a read succeeds, and keeps retrying if Safari's storage
+  // is momentarily unavailable.
+  apply();
+  watchFrames();
+  loadRules();
 })();

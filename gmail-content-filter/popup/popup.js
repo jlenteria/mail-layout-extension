@@ -14,10 +14,48 @@ const DEFAULTS = [
   'att: Invoice.pdf',
   'hide: Please see attached',
   'from: @updates.example',
+  'css: div[data-card-id$=":kopisummary"]',
 ].join('\n');
+
+// Safari's extension storage occasionally rejects reads and writes with
+// "Disk I/O error" (Safari 18.5 and 26/27). Retry instead of treating the
+// failure as "no rules", which would make the box look empty and a Save wipe
+// the rules that are still on disk.
+const RETRY_MS = [0, 120, 300, 700];
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function retryStorage(operation) {
+  let lastError;
+  for (const delay of RETRY_MS) {
+    if (delay) await wait(delay);
+    try {
+      return await operation();
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError;
+}
+
+const readStoredRules = () => retryStorage(() => api.storage.local.get(KEY));
+const writeStoredRules = (text) => retryStorage(
+  () => api.storage.local.set({ [KEY]: text }),
+);
 
 const area = document.getElementById('rules');
 const status = document.getElementById('status');
+const buttons = [...document.querySelectorAll('.row button')];
+let savedText = null;
+
+function setStatus(text, error = false) {
+  status.textContent = text;
+  status.classList.toggle('error', error);
+}
+
+function setEnabled(on) {
+  area.disabled = !on;
+  for (const button of buttons) button.disabled = !on;
+}
 
 function countRules(text) {
   const kinds = { att: 0, hide: 0, redact: 0, css: 0, from: 0 };
@@ -40,14 +78,43 @@ function describe(kinds) {
 }
 
 async function load() {
-  const stored = await api.storage.local.get(KEY);
-  area.value = stored[KEY] === undefined ? DEFAULTS : stored[KEY];
-  status.textContent = describe(countRules(area.value));
+  try {
+    const stored = await readStoredRules();
+    savedText = stored[KEY] === undefined ? DEFAULTS : String(stored[KEY]);
+    area.value = savedText;
+    setEnabled(true);
+    setStatus(describe(countRules(savedText)));
+  } catch (err) {
+    // Do not show an empty box over rules that still exist on disk, and do
+    // not let Save overwrite them. Keep trying until storage answers.
+    console.warn('[Mail Layout] could not read rules', err);
+    setEnabled(false);
+    setStatus(
+      'Safari could not read extension storage (Disk I/O error). Retrying; your rules are still on disk.',
+      true,
+    );
+    setTimeout(load, 5000);
+  }
 }
 
 async function save() {
-  await api.storage.local.set({ [KEY]: area.value });
-  status.textContent = `saved - ${describe(countRules(area.value))}`;
+  const text = area.value;
+  if (text === savedText) {
+    setStatus(`saved - ${describe(countRules(text))}`);
+    return;
+  }
+  setStatus('saving…');
+  try {
+    await writeStoredRules(text);
+    savedText = text;
+    setStatus(`saved - ${describe(countRules(text))}`);
+  } catch (err) {
+    console.warn('[Mail Layout] could not save rules', err);
+    setStatus(
+      'not saved - Safari reported a Disk I/O error. Your text is still here; try Save again.',
+      true,
+    );
+  }
 }
 
 document.getElementById('save').addEventListener('click', save);
@@ -56,21 +123,33 @@ document.getElementById('save').addEventListener('click', save);
 // for anyone who would rather click than remember a combination - and for
 // Safari, where the shortcut field starts empty until the user records one.
 async function send(type, { commitRules = false } = {}) {
-  if (commitRules) {
+  if (commitRules && area.value !== savedText) {
     // Saving first matters for the picker: it appends to what is already in
     // storage, so unsaved edits here would be overwritten by the new rule.
-    await api.storage.local.set({ [KEY]: area.value });
+    // If Safari refuses the write, do not open the picker - it would append
+    // to the stale text on disk and lose these edits.
+    try {
+      await writeStoredRules(area.value);
+      savedText = area.value;
+    } catch (err) {
+      console.warn('[Mail Layout] could not commit rules before picking', err);
+      setStatus(
+        'not saved - Safari reported a Disk I/O error. Try again before picking.',
+        true,
+      );
+      return;
+    }
   }
   const [tab] = await api.tabs.query({ active: true, currentWindow: true });
   if (!tab || !/^https:\/\/mail\.google\.com\//.test(tab.url || '')) {
-    status.textContent = 'open a Gmail tab first, then try again';
+    setStatus('open a Gmail tab first, then try again');
     return;
   }
   try {
     await api.tabs.sendMessage(tab.id, { type });
     window.close();
   } catch {
-    status.textContent = 'no response from Gmail - reload the tab and try again';
+    setStatus('no response from Gmail - reload the tab and try again');
   }
 }
 
@@ -92,7 +171,7 @@ area.addEventListener('keydown', (e) => {
 });
 
 area.addEventListener('input', () => {
-  status.textContent = describe(countRules(area.value));
+  setStatus(describe(countRules(area.value)));
 });
 
 load();

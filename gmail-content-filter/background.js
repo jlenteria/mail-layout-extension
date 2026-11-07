@@ -20,13 +20,30 @@ const DEFAULTS = [
   'att: Invoice.pdf',
   'hide: Please see attached',
   'from: @updates.example',
+  'css: div[data-card-id$=":kopisummary"]',
 ].join('\n');
 
-api.runtime.onInstalled.addListener(async () => {
-  const stored = await api.storage.local.get('rules');
-  if (stored.rules === undefined) {
-    await api.storage.local.set({ rules: DEFAULTS });
+// Safari occasionally rejects the first storage call after install with
+// "Disk I/O error". Seeding is idempotent, so retry it rather than leaving the
+// extension without its starting rules.
+async function seedRules() {
+  for (const delay of [0, 120, 300, 700]) {
+    if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
+    try {
+      const stored = await api.storage.local.get('rules');
+      if (stored.rules === undefined) {
+        await api.storage.local.set({ rules: DEFAULTS });
+      }
+      return;
+    } catch {
+      /* storage busy - try again */
+    }
   }
+  console.warn('[Mail Layout] could not seed the default rules');
+}
+
+api.runtime.onInstalled.addListener(() => {
+  seedRules();
 });
 
 if (api.commands && api.commands.onCommand) {
