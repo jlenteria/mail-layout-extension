@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Mail Layout",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "Applies saved layout adjustments to mail views.",
   "permissions": ["storage"],
   "host_permissions": ["https://mail.google.com/*"],
