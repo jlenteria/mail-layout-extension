@@ -24,7 +24,7 @@ re-render, because Gmail throws the thread DOM away constantly.
 
 | Rule | Effect |
 | --- | --- |
-| `att: LENTERIA LEDGER.pdf` | Hide that attachment card, and the `Attachment:` chip on collapsed rows |
+| `att: invoice.pdf` | Hide that attachment card, and the `Attachment:` chip on collapsed rows |
 | `hide: Please see attached` | Remove the whole block that carries the phrase |
 | `redact: 4419-0021` | Bar over the characters, keep the layout intact |
 | `css: div.aQH` | Hide everything matching a selector, for when text is not enough |
